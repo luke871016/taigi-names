@@ -93,6 +93,60 @@
         gap: 15px;
         margin: 20px 0;
         flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .switcher-container {
+        position: relative;
+        display: inline-flex;
+        background: white;
+        border-radius: 25px;
+        padding: 2px;
+        cursor: pointer;
+        user-select: none;
+        border: 1px solid #e0e0e0;
+      }
+
+      .switcher-track {
+        position: relative;
+        display: flex;
+        width: 140px;
+        height: 36px;
+      }
+
+      .switcher-option {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 500;
+        color: #495057;
+        z-index: 2;
+        transition: color 0.3s ease;
+        border-radius: 20px;
+        cursor: pointer;
+      }
+
+      .switcher-option.active {
+        color: white;
+      }
+
+      .switcher-slider {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: calc(50% - 2px);
+        height: calc(100% - 4px);
+        background: #3498db;
+        border-radius: 20px;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .switcher-container.poj-active .switcher-slider {
+        transform: translateX(100%);
       }
 
       .btn {
@@ -384,6 +438,15 @@
           flex-direction: column;
         }
 
+        .switcher-container {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .switcher-track {
+          width: 100%;
+        }
+
         .btn {
           width: 100%;
         }
@@ -463,6 +526,15 @@
             <button id="loadSampleBtn" class="btn btn-secondary">
               📝 見本
             </button>
+            <div class="switcher-container" id="switcherContainer">
+              <div class="switcher-track">
+                <span class="switcher-slider"></span>
+                <span class="switcher-option active" id="switcherLeft"
+                  >台羅</span
+                >
+                <span class="switcher-option" id="switcherRight">白話字</span>
+              </div>
+            </div>
           </div>
 
           <div class="loading" id="loading">
@@ -551,6 +623,7 @@
           this.compoundSurnameData = null;
           this.isLoaded = false;
           this.useEmbeddedData = false;
+          this.usePOJ = false; // false = 台羅 (lo), true = 白話字 (lo_poj)
         }
 
         // 載入所有資料
@@ -614,7 +687,39 @@
             return [];
           }
 
-          return data[char].map((item) => item.lo);
+          // 根據 usePOJ 選擇讀取 lo 或 lo_poj
+          const property = this.usePOJ ? "lo_poj" : "lo";
+          return data[char].map((item) => item[property] || item.lo);
+        }
+
+        // 設定拼音系統
+        setPronunciationSystem(usePOJ) {
+          this.usePOJ = usePOJ;
+          // 保存到本地暫存
+          try {
+            localStorage.setItem("pronunciationSystem", usePOJ ? "poj" : "tl");
+          } catch (error) {
+            console.warn("無法保存拼音系統選擇到本地暫存:", error);
+          }
+        }
+
+        // 從本地暫存讀取拼音系統
+        loadPronunciationSystem() {
+          try {
+            const saved = localStorage.getItem("pronunciationSystem");
+            if (saved === "poj") {
+              this.usePOJ = true;
+              return true;
+            } else if (saved === "tl") {
+              this.usePOJ = false;
+              return false;
+            }
+          } catch (error) {
+            console.warn("無法從本地暫存讀取拼音系統選擇:", error);
+          }
+          // 預設為台羅
+          this.usePOJ = false;
+          return false;
         }
       }
 
@@ -645,6 +750,41 @@
           document
             .getElementById("copyTableBtn")
             .addEventListener("click", () => this.copyTable());
+
+          // 拼音系統切換器
+          const leftOption = document.getElementById("switcherLeft");
+          const rightOption = document.getElementById("switcherRight");
+
+          // 點擊左側選項（台羅）
+          leftOption.addEventListener("click", () => {
+            const usePOJ = false;
+            window.dataLoader.setPronunciationSystem(usePOJ);
+            this.updateSwitcherLabels(usePOJ);
+          });
+
+          // 點擊右側選項（白話字）
+          rightOption.addEventListener("click", () => {
+            const usePOJ = true;
+            window.dataLoader.setPronunciationSystem(usePOJ);
+            this.updateSwitcherLabels(usePOJ);
+          });
+        }
+
+        // 更新切換器標籤樣式
+        updateSwitcherLabels(usePOJ) {
+          const leftLabel = document.getElementById("switcherLeft");
+          const rightLabel = document.getElementById("switcherRight");
+          const container = document.getElementById("switcherContainer");
+
+          if (usePOJ) {
+            leftLabel.classList.remove("active");
+            rightLabel.classList.add("active");
+            container.classList.add("poj-active");
+          } else {
+            leftLabel.classList.add("active");
+            rightLabel.classList.remove("active");
+            container.classList.remove("poj-active");
+          }
         }
 
         // 載入資料
@@ -656,6 +796,10 @@
             await window.dataLoader.loadAllData();
 
             loadingElement.style.display = "none";
+
+            // 從本地暫存讀取拼音系統選擇
+            const savedUsePOJ = window.dataLoader.loadPronunciationSystem();
+            this.updateSwitcherLabels(savedUsePOJ);
           } catch (error) {
             document.getElementById("loading").style.display = "none";
             this.showErrorMessage(`載入資料失敗: ${error.message}`);
